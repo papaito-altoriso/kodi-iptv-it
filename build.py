@@ -131,13 +131,13 @@ def main() -> int:
             line = line.replace(m.group(0), f'tvg-id="{new_id}"')
         else:
             line = line.replace("#EXTINF:-1", f'#EXTINF:-1 tvg-id="{new_id}"', 1)
-        entries.append((name, line, url))
+        entries.append((name, line, url, new_id, tid))
         kept += 1
 
     # Per ogni numero LCN tiene la versione migliore del canale; i doppioni
     # (SD/HD, geobloccati, regionali) finiscono tra gli altri dal 100 in poi.
     best = {}
-    for idx, (name, _, _) in enumerate(entries):
+    for idx, (name, *_) in enumerate(entries):
         num = LCN.get(lcn_key(name))
         if num and (num not in best or quality(name) > quality(entries[best[num]][0])):
             best[num] = idx
@@ -149,8 +149,15 @@ def main() -> int:
             nxt += 1
 
     out = [f'#EXTM3U x-tvg-url="{EPG_URL}"']
+    # Kodi usa tvg-id come identificativo del canale: due canali con lo stesso
+    # tvg-id vengono fusi in uno. Il primo (quello numerato) tiene l'ID della
+    # guida, i doppioni tornano all'ID originale con suffisso (es. Rai2.it@HD).
+    used = set()
     for idx in sorted(chno, key=chno.get):
-        name, line, url = entries[idx]
+        name, line, url, new_id, orig_id = entries[idx]
+        if new_id.lower() in used and orig_id:
+            line = line.replace(f'tvg-id="{new_id}"', f'tvg-id="{orig_id}"', 1)
+        used.add(new_id.lower())
         line = re.sub(r'\s*tvg-chno="[^"]*"', "", line)
         line = line.replace("#EXTINF:-1", f'#EXTINF:-1 tvg-chno="{chno[idx]}"', 1)
         out += [line, url]
