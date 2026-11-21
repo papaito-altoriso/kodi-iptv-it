@@ -41,6 +41,39 @@ ALIASES = {
 }
 
 
+# Numerazione del digitale terrestre (LCN): nome normalizzato -> numero.
+LCN = {
+    "rai1": 1, "rai2": 2, "rai3": 3, "rete4": 4, "canale5": 5, "italia1": 6,
+    "la7": 7, "tv8": 8, "nove": 9,
+    "20": 20, "rai4": 21, "iris": 22, "rai5": 23, "raimovie": 24,
+    "raipremium": 25, "cielo": 26, "twentyseven": 27, "tv2000": 28,
+    "la7d": 29, "la5": 30, "realtime": 31, "qvc": 32, "foodnetwork": 33,
+    "cine34": 34, "focus": 35, "rtl1025tv": 36, "giallo": 38, "topcrime": 39,
+    "boing": 40, "k2": 41, "raigulp": 42, "raiyoyo": 43, "frisbee": 44,
+    "cartoonito": 46, "super": 47, "rainews24": 48, "skytg24": 50,
+    "tgcom24": 51, "dmax": 52, "raistoria": 54, "mediasetextra": 55,
+    "hgtv": 56, "raiscuola": 57, "raisport": 58, "motortrend": 59,
+    "sportitalia": 60,
+}
+OTHER_START = 100  # gli altri canali partono da qui, nell'ordine della lista
+
+
+def lcn_key(name: str) -> str:
+    n = re.sub(r"\(.*?\)|\[.*?\]", " ", name.lower())
+    n = re.sub(r"\s+hd\s*$", " ", n.strip())
+    return re.sub(r"[^a-z0-9]", "", n)
+
+
+def quality(name: str) -> tuple:
+    """Più alto = meglio: non geobloccato, attivo 24/7, risoluzione maggiore."""
+    res = re.search(r"\((\d{3,4})p\)", name)
+    return (
+        "geo-blocked" not in name.lower(),
+        "not 24/7" not in name.lower(),
+        int(res.group(1)) if res else 0,
+    )
+
+
 def fetch(url: str) -> bytes:
     req = urllib.request.Request(url, headers={"User-Agent": "kodi-iptv-it/1.0"})
     with urllib.request.urlopen(req, timeout=120) as r:
@@ -68,7 +101,7 @@ def main() -> int:
             epg_by_name.setdefault(norm(dn), cid)
 
     lines = m3u.splitlines()
-    out = [f'#EXTM3U x-tvg-url="{EPG_URL}"']
+    entries = []  # (nome, riga EXTINF, url)
     kept = matched = dropped = 0
     i = 0
     while i < len(lines):
@@ -98,8 +131,29 @@ def main() -> int:
             line = line.replace(m.group(0), f'tvg-id="{new_id}"')
         else:
             line = line.replace("#EXTINF:-1", f'#EXTINF:-1 tvg-id="{new_id}"', 1)
-        out += [line, url]
+        entries.append((name, line, url))
         kept += 1
+
+    # Per ogni numero LCN tiene la versione migliore del canale; i doppioni
+    # (SD/HD, geobloccati, regionali) finiscono tra gli altri dal 100 in poi.
+    best = {}
+    for idx, (name, _, _) in enumerate(entries):
+        num = LCN.get(lcn_key(name))
+        if num and (num not in best or quality(name) > quality(entries[best[num]][0])):
+            best[num] = idx
+    chno = {idx: num for num, idx in best.items()}
+    nxt = OTHER_START
+    for idx in range(len(entries)):
+        if idx not in chno:
+            chno[idx] = nxt
+            nxt += 1
+
+    out = [f'#EXTM3U x-tvg-url="{EPG_URL}"']
+    for idx in sorted(chno, key=chno.get):
+        name, line, url = entries[idx]
+        line = re.sub(r'\s*tvg-chno="[^"]*"', "", line)
+        line = line.replace("#EXTINF:-1", f'#EXTINF:-1 tvg-chno="{chno[idx]}"', 1)
+        out += [line, url]
 
     if kept < 50:
         print(f"Troppo pochi canali ({kept}): sorgente probabilmente rotta, non scrivo.")
