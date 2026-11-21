@@ -109,8 +109,17 @@ def main() -> int:
         if not line.startswith("#EXTINF"):
             i += 1
             continue
-        url = lines[i + 1] if i + 1 < len(lines) else ""
-        i += 2
+        # Dopo #EXTINF possono esserci righe di opzioni (#EXTVLCOPT, #KODIPROP…)
+        # prima dell'indirizzo: le teniamo insieme all'indirizzo.
+        i += 1
+        extra = []
+        while i < len(lines) and lines[i].startswith("#") and not lines[i].startswith("#EXTINF"):
+            extra.append(lines[i])
+            i += 1
+        if i >= len(lines) or lines[i].startswith("#"):
+            continue
+        url = "\n".join(extra + [lines[i]])
+        i += 1
         name = line.rsplit(",", 1)[-1].strip()
         if norm(name) == "" or name.lower().startswith(PAY_PREFIXES):
             dropped += 1
