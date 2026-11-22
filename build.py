@@ -19,6 +19,8 @@ from pathlib import Path
 
 M3U_URL = "https://iptv-org.github.io/iptv/countries/it.m3u"
 EPG_URL = "https://iptv-epg.org/files/epg-it.xml.gz"
+# Guida unita (italiana + tematici) pubblicata accanto alla lista.
+MERGED_EPG_URL = "https://papaito-altoriso.github.io/kodi-iptv-it/epg.xml.gz"
 
 # Canali a pagamento: nella lista pubblica possono comparire flussi non autorizzati.
 PAY_PREFIXES = (
@@ -135,13 +137,14 @@ def works(stream: dict) -> bool:
         return False
 
 
-def thematic() -> list:
+def thematic() -> tuple:
+    """Righe M3U dei canali tematici e la lista (tvg-id, nome) per la guida."""
     streams = json.loads(fetch(STREAMS_URL))
     by_channel = {}
     for s in streams:
         if s.get("channel") and OFFICIAL_HOSTS.search(s.get("url", "")):
             by_channel.setdefault(s["channel"], []).append(s)
-    out = []
+    out, chans = [], []
     for group, start, ids in THEMATIC:
         num = start
         for cid in ids:
@@ -161,9 +164,90 @@ def thematic() -> list:
             if s.get("referrer"):
                 out.append(f"#EXTVLCOPT:http-referrer={s['referrer']}")
             out.append(s["url"])
+            chans.append((cid, name))
             num += 1
-    print(f"canali tematici: {sum(1 for l in out if l.startswith('#EXTINF'))}")
-    return out
+    print(f"canali tematici: {len(chans)}")
+    return out, chans
+
+
+# Guide pubbliche per i canali tematici (piattaforme FAST e iptv-epg).
+EXTRA_EPG_URLS = [
+    "https://i.mjh.nz/Plex/all.xml.gz",
+    "https://i.mjh.nz/PlutoTV/all.xml.gz",
+    "https://i.mjh.nz/SamsungTVPlus/all.xml.gz",
+    "https://i.mjh.nz/Roku/all.xml.gz",
+    "https://iptv-epg.org/files/epg-fr.xml.gz",
+    "https://iptv-epg.org/files/epg-gb.xml.gz",
+]
+# Nome con cui cercare il canale nelle guide; None = non cercare (feed diversi
+# con lo stesso nome darebbero orari sbagliati).
+EPG_NAMES = {
+    "ZenLIFEbyStingray.ca": "ZenLIFE",
+    "SpaceLivepoweredbysen.uk": "Space Live",
+    "TheJamieOliverChannel.us": "Jamie Oliver",
+    "ARTFLIXMovieClassics.us": "Artflix",
+    "30ALuxeLifeDiscovered.us": "30A Luxe Life",
+    "SmartLifeStyleTV.us": None,
+    "FashionTVParisLOriginal.fr": None,
+    "FashionTVSecrets.fr": None,
+    "FashionTVEurope.fr": None,
+}
+
+
+def extra_epg(chans: list) -> str:
+    """Canali e programmi dei tematici presi dalle guide esterne, con il tvg-id della lista."""
+    import xml.etree.ElementTree as ET
+
+    wanted = {}
+    for cid, name in chans:
+        search = EPG_NAMES.get(cid, name)
+        if search:
+            wanted[cid] = norm_epg(search)
+
+    def matches(display: str) -> list:
+        d = norm_epg(display)
+        return [cid for cid, w in wanted.items() if d == w or (len(w) > 5 and w in d and len(d) < len(w) + 12)]
+
+    progs = {}  # (nostro id, id sorgente) -> [xml programma]
+    for url in EXTRA_EPG_URLS:
+        try:
+            raw = gzip.decompress(fetch(url))
+        except Exception as e:
+            print(f"guida saltata {url}: {e}")
+            continue
+        src = {}  # id sorgente -> nostri id
+        for _, el in ET.iterparse(__import__("io").BytesIO(raw), events=("end",)):
+            if el.tag == "channel":
+                for dn in el.findall("display-name"):
+                    for cid in matches(dn.text or ""):
+                        src.setdefault(el.get("id"), set()).add(cid)
+                el.clear()
+            elif el.tag == "programme":
+                for cid in src.get(el.get("channel"), ()):
+                    el2 = ET.fromstring(ET.tostring(el))
+                    el2.set("channel", cid)
+                    progs.setdefault((cid, url + el.get("channel")), []).append(ET.tostring(el2, encoding="unicode"))
+                el.clear()
+        del raw
+
+    parts, covered = [], 0
+    for cid, name in chans:
+        best = max((v for k, v in progs.items() if k[0] == cid), key=len, default=None)
+        if not best:
+            continue
+        covered += 1
+        parts.append(f'<channel id="{cid}"><display-name>{escape(name)}</display-name></channel>')
+        parts += best
+    print(f"guida per canali tematici: {covered} su {len(chans)}")
+    return "\n".join(parts)
+
+
+def norm_epg(s: str) -> str:
+    return re.sub(r"[^a-z0-9]", "", s.lower())
+
+
+def escape(s: str) -> str:
+    return s.replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;")
 
 
 def main() -> int:
@@ -234,7 +318,7 @@ def main() -> int:
             chno[idx] = nxt
             nxt += 1
 
-    out = [f'#EXTM3U x-tvg-url="{EPG_URL}"']
+    out = [f'#EXTM3U x-tvg-url="{MERGED_EPG_URL}"']
     # Kodi usa tvg-id come identificativo del canale: due canali con lo stesso
     # tvg-id vengono fusi in uno. Il primo (quello numerato) tiene l'ID della
     # guida, i doppioni tornano all'ID originale con suffisso (es. Rai2.it@HD).
@@ -252,14 +336,26 @@ def main() -> int:
         print(f"Troppo pochi canali ({kept}): sorgente probabilmente rotta, non scrivo.")
         return 1
 
+    th_chans = []
     try:
-        out += thematic()
+        th_lines, th_chans = thematic()
+        out += th_lines
     except Exception as e:  # i tematici non devono mai bloccare la lista principale
         print(f"Canali tematici saltati: {e}")
+
+    # Guida unica: quella italiana più i programmi dei tematici trovati altrove.
+    extra = ""
+    try:
+        extra = extra_epg(th_chans)
+    except Exception as e:
+        print(f"Guida dei tematici saltata: {e}")
+    head, _, _ = epg.rpartition("</tv>")
+    merged = head + extra + "\n</tv>\n"
 
     dist = Path(__file__).parent / "dist"
     dist.mkdir(exist_ok=True)
     (dist / "it.m3u").write_text("\n".join(out) + "\n", encoding="utf-8")
+    (dist / "epg.xml.gz").write_bytes(gzip.compress(merged.encode("utf-8")))
     print(f"canali: {kept}, con guida TV: {matched}, esclusi (a pagamento): {dropped}")
     return 0
 
