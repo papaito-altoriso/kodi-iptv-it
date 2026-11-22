@@ -92,19 +92,33 @@ def norm(name: str) -> str:
 
 # Canali tematici internazionali: (gruppo, primo numero, [ID canale iptv-org]).
 THEMATIC = [
-    ("Droni e natura", 900, ["DroneTV.us", "MyZenTV.fr"]),
+    ("Droni e natura", 900, [
+        "DroneTV.us", "MyZenTV.fr", "ZenLIFEbyStingray.ca", "SpaceLivepoweredbysen.uk",
+        "WildEarth.za", "WaypointTV.us",
+    ]),
     ("Moda e lifestyle", 910, [
         "FashionTVParisLOriginal.fr", "FashionTVSecrets.fr", "FashionTVEurope.fr",
         "GlobalFashionChannel.us", "30ALuxeLifeDiscovered.us",
+        "SoReal.us", "INFAST.nl", "Revry.us", "RevryQueer.us", "BizTV.us",
+        "SmartLifeStyleTV.us", "AntiquesRoadTrip.us", "TheJamieOliverChannel.us",
     ]),
-    ("Design e arte", 930, ["TheDesignNetwork.us", "apartTV.lu", "BBCHomeGarden.us"]),
+    ("Design e arte", 930, [
+        "TheDesignNetwork.us", "apartTV.lu", "BBCHomeGarden.us",
+        "ClassicArtsShowcase.us", "ARTFLIXMovieClassics.us",
+    ]),
     ("Viaggi", 950, ["AutenticTravel.de"]),
+    ("Documentari e cultura", 960, [
+        "BBCEarth.uk", "BBCFour.uk", "FlowersTVUSA.us", "FoxSoul.us",
+        "MBCAmerica.us", "MedTV.mt", "DDMizoram.in",
+    ]),
+    ("Notizie", 980, ["EuronewsItalian.fr"]),
 ]
 STREAMS_URL = "https://iptv-org.github.io/api/streams.json"
 # Solo flussi da piattaforme di distribuzione ufficiali (FAST/CDN), non restream.
 OFFICIAL_HOSTS = re.compile(
     r"wurl\.tv|amagi\.tv|mediatailor|teleosmedia|aniview|evrideo|streamhoster"
     r"|30a-tv\.com|akamaized\.net|cloudfront\.net|cdn-redge\.media"
+    r"|rakuten\.tv|stingray\.com|frequency\.stream"
 )
 
 
