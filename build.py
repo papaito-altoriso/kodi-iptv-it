@@ -11,6 +11,7 @@ esclude i canali a pagamento e scrive dist/it.m3u.
 """
 
 import gzip
+import json
 import re
 import sys
 import urllib.request
@@ -87,6 +88,68 @@ def norm(name: str) -> str:
     n = re.sub(r"^\s*it\s*-\s*", " ", n)
     n = re.sub(r"\b(hd|fhd|sd|italia|italy)\b", " ", n)
     return re.sub(r"[^a-z0-9]", "", n)
+
+
+# Canali tematici internazionali: (gruppo, primo numero, [ID canale iptv-org]).
+THEMATIC = [
+    ("Droni e natura", 900, ["DroneTV.us", "MyZenTV.fr"]),
+    ("Moda e lifestyle", 910, [
+        "FashionTVParisLOriginal.fr", "FashionTVSecrets.fr", "FashionTVEurope.fr",
+        "GlobalFashionChannel.us", "30ALuxeLifeDiscovered.us",
+    ]),
+    ("Design e arte", 930, ["TheDesignNetwork.us", "apartTV.lu", "BBCHomeGarden.us"]),
+    ("Viaggi", 950, ["AutenticTravel.de"]),
+]
+STREAMS_URL = "https://iptv-org.github.io/api/streams.json"
+# Solo flussi da piattaforme di distribuzione ufficiali (FAST/CDN), non restream.
+OFFICIAL_HOSTS = re.compile(
+    r"wurl\.tv|amagi\.tv|mediatailor|teleosmedia|aniview|evrideo|streamhoster"
+    r"|30a-tv\.com|akamaized\.net|cloudfront\.net|cdn-redge\.media"
+)
+
+
+def works(stream: dict) -> bool:
+    """Il flusso risponde con una playlist HLS?"""
+    headers = {"User-Agent": stream.get("user_agent") or "Mozilla/5.0"}
+    if stream.get("referrer"):
+        headers["Referer"] = stream["referrer"]
+    try:
+        req = urllib.request.Request(stream["url"], headers=headers)
+        with urllib.request.urlopen(req, timeout=15) as r:
+            return b"#EXTM3U" in r.read(2000)
+    except Exception:
+        return False
+
+
+def thematic() -> list:
+    streams = json.loads(fetch(STREAMS_URL))
+    by_channel = {}
+    for s in streams:
+        if s.get("channel") and OFFICIAL_HOSTS.search(s.get("url", "")):
+            by_channel.setdefault(s["channel"], []).append(s)
+    out = []
+    for group, start, ids in THEMATIC:
+        num = start
+        for cid in ids:
+            cands = by_channel.get(cid)
+            if not cands:
+                continue
+            cands.sort(key=lambda s: -int((s.get("quality") or "0p").rstrip("pi") or 0))
+            s = next((c for c in cands if works(c)), None)
+            if s is None:
+                continue
+            name = s.get("title") or cid.split(".")[0]
+            out.append(
+                f'#EXTINF:-1 tvg-chno="{num}" tvg-id="{cid}" group-title="{group}",{name}'
+            )
+            if s.get("user_agent"):
+                out.append(f"#EXTVLCOPT:http-user-agent={s['user_agent']}")
+            if s.get("referrer"):
+                out.append(f"#EXTVLCOPT:http-referrer={s['referrer']}")
+            out.append(s["url"])
+            num += 1
+    print(f"canali tematici: {sum(1 for l in out if l.startswith('#EXTINF'))}")
+    return out
 
 
 def main() -> int:
@@ -174,6 +237,11 @@ def main() -> int:
     if kept < 50:
         print(f"Troppo pochi canali ({kept}): sorgente probabilmente rotta, non scrivo.")
         return 1
+
+    try:
+        out += thematic()
+    except Exception as e:  # i tematici non devono mai bloccare la lista principale
+        print(f"Canali tematici saltati: {e}")
 
     dist = Path(__file__).parent / "dist"
     dist.mkdir(exist_ok=True)

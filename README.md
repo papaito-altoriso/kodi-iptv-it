@@ -10,3 +10,8 @@ Lista M3U dei canali italiani gratuiti per Kodi (PVR IPTV Simple Client), con ID
 In Kodi: IPTV Simple Client → Configure → "Migrated Add-on Config"
 - General → M3U playlist URL: `https://<utente>.github.io/kodi-iptv-it/it.m3u`
 - EPG → XMLTV URL: `https://iptv-epg.org/files/epg-it.xml.gz`
+
+## Canali tematici
+In fondo alla lista, numerati a parte e raggruppati (`group-title`): Droni e natura (900+),
+Moda e lifestyle (910+), Design e arte (930+), Viaggi (950+). Presi dall'API di iptv-org,
+solo da piattaforme di distribuzione ufficiali (`OFFICIAL_HOSTS`) e solo se il flusso risponde.
