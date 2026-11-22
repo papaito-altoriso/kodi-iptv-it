@@ -114,6 +114,10 @@ THEMATIC = [
         "MBCAmerica.us", "MedTV.mt", "DDMizoram.in",
     ]),
     ("Notizie", 980, ["EuronewsItalian.fr"]),
+    ("Musica ricercata", 990, [
+        "QwestTV.fr", "QwestTVJazzBeyond.fr", "StingrayClassica.ca",
+        "StingrayDJAZZ.ca", "QelloConcertsbyStingray.ca",
+    ]),
 ]
 STREAMS_URL = "https://iptv-org.github.io/api/streams.json"
 # Solo flussi da piattaforme di distribuzione ufficiali (FAST/CDN), non restream.
