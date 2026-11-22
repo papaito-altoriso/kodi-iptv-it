@@ -116,7 +116,7 @@ THEMATIC = [
     ("Notizie", 980, ["EuronewsItalian.fr"]),
     ("Musica ricercata", 990, [
         "QwestTV.fr", "QwestTVJazzBeyond.fr", "StingrayClassica.ca",
-        "StingrayDJAZZ.ca", "QelloConcertsbyStingray.ca",
+        "StingrayDJAZZ.ca", "QelloConcertsbyStingray.ca", "Classica.us",
     ]),
 ]
 STREAMS_URL = "https://iptv-org.github.io/api/streams.json"
@@ -125,6 +125,7 @@ OFFICIAL_HOSTS = re.compile(
     r"wurl\.tv|amagi\.tv|mediatailor|teleosmedia|aniview|evrideo|streamhoster"
     r"|30a-tv\.com|akamaized\.net|cloudfront\.net|cdn-redge\.media"
     r"|rakuten\.tv|stingray\.com|frequency\.stream"
+    r"|pluto\.tv|jmp2\.uk"  # jmp2.uk: rinvio pubblico ai flussi ufficiali di Pluto TV
 )
 
 
